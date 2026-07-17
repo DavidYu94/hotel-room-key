@@ -737,7 +737,7 @@
         setStatus("正在生成加密链接…", "info");
         const enc = await encryptPayload(p);
         const base = location.href.split("#")[0].split("?")[0];
-        currentGeneratedLink = `${base}#card=${enc.data}&key=${enc.key}`;
+        currentGeneratedLink = `${base}#card=${enc.data}.${enc.key}`;
         $("shareLink").value = currentGeneratedLink;
         $("resultBox").classList.remove("hidden");
         setStatus("客人专属链接已生成。", "success");
@@ -799,11 +799,48 @@
     }
 
     async function renderGuestFromHash() {
-      const hash = location.hash.startsWith("#") ? location.hash.slice(1) : location.hash;
-      const params = new URLSearchParams(hash);
-      const data = params.get("card");
-      const key = params.get("key");
-      if (!data || !key) return false;
+    const hash = location.hash.startsWith("#")
+    ? location.hash.slice(1)
+    : location.hash;
+
+  // 完全没有房卡参数时，才显示管理员生成页面
+  if (!hash) return false;
+
+  const params = new URLSearchParams(hash);
+  const cardValue = params.get("card");
+
+  let data = "";
+  let key = "";
+
+  // 新链接格式：#card=加密内容.密钥
+  if (cardValue && cardValue.includes(".")) {
+    const separatorIndex = cardValue.lastIndexOf(".");
+    data = cardValue.slice(0, separatorIndex);
+    key = cardValue.slice(separatorIndex + 1);
+  } else {
+    // 兼容以前已经发送给客人的旧链接
+    data = cardValue || "";
+    key = params.get("key") || "";
+  }
+
+  // 链接被截断或损坏时，只显示无效房卡，不显示生成后台
+  if (!data || !key) {
+    const invalidMessage =
+      "Digitaler Zimmerschlüssel ungültig / Invalid digital room key";
+
+    $("loadingView").classList.add("hidden");
+    $("adminView").classList.add("hidden");
+    $("guestView").classList.remove("hidden");
+
+    $("guestStatus").className = "status-banner invalid";
+    $("guestStatus").textContent = invalidMessage;
+
+    $("activeCardArea").classList.add("hidden");
+    $("expiredArea").classList.remove("hidden");
+    $("expiredArea").textContent = invalidMessage;
+
+    return true;
+  }
       try {
         const p = await decryptPayload(key, data);
         if (!isSanePayload(p)) throw new Error("bad payload");
